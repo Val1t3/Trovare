@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Trovare",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

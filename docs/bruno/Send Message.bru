@@ -1,0 +1,47 @@
+meta {
+  name: Send Message
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/telegram
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "update_id": 1,
+    "message": {
+      "message_id": 1,
+      "date": 0,
+      "chat": {
+        "id": 111,
+        "type": "private"
+      },
+      "from": {
+        "id": 111,
+        "is_bot": false,
+        "first_name": "Val"
+      },
+      "text": "/help"
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.ok: eq true
+}
+
+docs {
+  Simulates a Telegram update hitting the webhook (as if you sent a message
+  to the bot). Change `text` to test other messages.
+
+  The webhook always answers `{"ok": true}`. For the message to actually be
+  dispatched, `chat.id` (111 here) must be listed in `TELEGRAM_ALLOWED_CHAT_IDS`
+  in your `.env`; otherwise it is silently rejected. The bot's reply is sent
+  back over the Telegram API (or logged in local/degraded mode when no valid
+  `TELEGRAM_BOT_TOKEN` is set).
+}

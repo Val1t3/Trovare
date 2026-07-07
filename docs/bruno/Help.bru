@@ -1,0 +1,27 @@
+meta {
+  name: Help
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/chat
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "message": "/help"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.reply: eq Hello World!
+}
+
+docs {
+  Tests the `/help` command through the REST chat surface.
+  Expects `{"reply":"Hello World!"}`.
+}

@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    container_name: trovare
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist the SQLite database (and any other app data) across restarts.
+      - ./data:/app/data
+    restart: unless-stopped

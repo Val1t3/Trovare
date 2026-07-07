@@ -26,7 +26,7 @@ The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interfac
 | Environment | python-dotenv | Sensitive variables (.env) |
 | Package manager | uv | Fast Python package & project manager |
 
-**Python version**: 3.11+
+**Python version**: 3.14
 
 ---
 
@@ -187,7 +187,7 @@ PORT=8000
 ### Prerequisites
 
 ```bash
-# Python 3.11+
+# Python 3.14
 python --version
 
 # uv (fast Python package manager)
@@ -199,83 +199,32 @@ playwright install chromium
 playwright install-deps chromium
 ```
 
-### Install
+### Run
+
+Runs the app locally in the same environment as production (Python 3.14 + uv,
+served by uvicorn on port 8000). Requires a filled-in `.env` (see the
+Environment Variables section).
 
 ```bash
-git clone <repo> trovare
-cd trovare
-
-# uv automatically creates a virtual environment
-uv sync
-
-cp .env.example .env
-# Fill in variables in .env
-
-# Initialize the SQLite database
-uv run python -c "from storage.db import init_db; import asyncio; asyncio.run(init_db())"
-```
-
-### Run in development
-
-```bash
-# Start the API with hot reload
-uv run uvicorn api.main:app --reload --port 8000
-
-# Expose locally with ngrok (to test the Telegram webhook)
-ngrok http 8000
-# Then update TELEGRAM_WEBHOOK_URL in .env with the ngrok URL
-```
-
-### Register the Telegram webhook
-
-```bash
-# Run this after any public URL change
-uv run python -c "
-import asyncio
-from telegram import Bot
-from dotenv import load_dotenv
-import os
-load_dotenv()
-async def set_webhook():
-    bot = Bot(os.getenv('TELEGRAM_BOT_TOKEN'))
-    await bot.set_webhook(os.getenv('TELEGRAM_WEBHOOK_URL'))
-    print('Webhook registered')
-asyncio.run(set_webhook())
-"
-```
-
-### Run in production (systemd)
-
-```bash
-# Copy the service file
-sudo cp deploy/trovare.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable trovare
-sudo systemctl start trovare
+# Build and start in the background
+docker compose up --build -d
 
 # Follow logs
-journalctl -u trovare -f
+docker compose logs -f
+
+# Health check
+curl localhost:8000/health        # -> {"status":"ok"}
+
+# Stop and remove the container
+docker compose down
+
+# Rebuild after changing dependencies (pyproject.toml / uv.lock)
+docker compose build --no-cache
 ```
 
-### deploy/trovare.service
-
-```ini
-[Unit]
-Description=Trovare FastAPI
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/opt/trovare
-EnvironmentFile=/opt/trovare/.env
-ExecStart=/opt/trovare/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+The SQLite database is persisted on the host via the `./data` volume.
+The image is production-like: no hot reload and the source is not mounted, so
+rebuild (`docker compose up --build`) to pick up code changes.
 
 ---
 
@@ -287,38 +236,3 @@ WantedBy=multi-user.target
 - **Prompts**: all templates in `llm/prompts.py`, never inline in business logic
 - **No print statements**: use `logging` (level configured via `LOG_LEVEL` in `.env`)
 - **Secrets**: only via `os.getenv()`, never hardcoded
-
----
-
-## Security
-
-- Validate `chat_id` on every incoming Telegram message: only IDs listed in `TELEGRAM_ALLOWED_CHAT_IDS` are accepted. Silently reject all others.
-- Never log tokens, API keys, or user message contents.
-- The FastAPI webhook must be served over HTTPS (nginx + Let's Encrypt recommended).
-
----
-
-## LLM Models — Usage Rules
-
-| Model | Use case | Reason |
-|---|---|---|
-| `claude-haiku-4-5-20251001` | Intent classification, watch filtering, deduplication | Fast, cheap, simple task |
-| `claude-sonnet-4-6` | Listing analysis, conversational chat, comparison | Better comprehension, rich context |
-
-Never use Sonnet for intent classification — Haiku is sufficient and 3x cheaper. Never use Haiku for the final listing analysis — quality matters there.
-
----
-
-## Project Status
-
-- [ ] Base FastAPI structure + Telegram webhook
-- [ ] Intent classifier (Haiku)
-- [ ] PAP scraper (requests + bs4)
-- [ ] Leboncoin scraper (playwright)
-- [ ] SeLoger scraper (playwright)
-- [ ] Listing analyzer (Sonnet)
-- [ ] Listings CRUD SQLite
-- [ ] criteria.yaml read/write via bot
-- [ ] Automated watch (APScheduler)
-- [ ] Telegram response formatting
-- [ ] systemd VPS deployment
