@@ -7,14 +7,14 @@ import logging
 import os
 
 
-def telegram_bot_token() -> str | None:
-    """Telegram bot token from @BotFather."""
-    return os.getenv("TELEGRAM_BOT_TOKEN")
+def discord_bot_token() -> str | None:
+    """Discord bot token from the Discord developer portal."""
+    return os.getenv("DISCORD_BOT_TOKEN")
 
 
-def allowed_chat_ids() -> set[int]:
-    """Parse TELEGRAM_ALLOWED_CHAT_IDS (comma-separated) into a set of ints."""
-    raw = os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+def allowed_channel_ids() -> set[int]:
+    """Parse DISCORD_ALLOWED_CHANNEL_IDS (comma-separated) into a set of ints."""
+    raw = os.getenv("DISCORD_ALLOWED_CHANNEL_IDS", "")
     ids: set[int] = set()
     for part in raw.split(","):
         part = part.strip()
@@ -23,7 +23,7 @@ def allowed_chat_ids() -> set[int]:
         try:
             ids.add(int(part))
         except ValueError:
-            logging.warning("Ignoring invalid chat id in TELEGRAM_ALLOWED_CHAT_IDS")
+            logging.warning("Ignoring invalid channel id in DISCORD_ALLOWED_CHANNEL_IDS")
     return ids
 
 

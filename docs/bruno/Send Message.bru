@@ -5,43 +5,26 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/telegram
+  url: {{baseUrl}}/chat
   body: json
   auth: none
 }
 
 body:json {
   {
-    "update_id": 1,
-    "message": {
-      "message_id": 1,
-      "date": 0,
-      "chat": {
-        "id": 111,
-        "type": "private"
-      },
-      "from": {
-        "id": 111,
-        "is_bot": false,
-        "first_name": "Val"
-      },
-      "text": "/help"
-    }
+    "message": "Hello there"
   }
 }
 
 assert {
   res.status: eq 200
-  res.body.ok: eq true
 }
 
 docs {
-  Simulates a Telegram update hitting the webhook (as if you sent a message
-  to the bot). Change `text` to test other messages.
+  Sends a free-text message through the REST chat surface (the same dispatcher
+  the Discord bot calls). Change `message` to test other inputs.
 
-  The webhook always answers `{"ok": true}`. For the message to actually be
-  dispatched, `chat.id` (111 here) must be listed in `TELEGRAM_ALLOWED_CHAT_IDS`
-  in your `.env`; otherwise it is silently rejected. The bot's reply is sent
-  back over the Telegram API (or logged in local/degraded mode when no valid
-  `TELEGRAM_BOT_TOKEN` is set).
+  In production the Discord bot forwards messages from allow-listed channels
+  (`DISCORD_ALLOWED_CHANNEL_IDS`) to this same dispatcher and posts the reply
+  back to the channel. This route lets you exercise the flow without Discord.
 }

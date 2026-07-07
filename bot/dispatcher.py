@@ -1,6 +1,6 @@
 """Message routing: map an incoming text to a handler and return its reply.
 
-Pure async logic shared by the Telegram webhook and the REST /chat route.
+Pure async logic shared by the Discord bot and the REST /chat route.
 Later this will delegate free text to the Haiku intent classifier.
 """
 

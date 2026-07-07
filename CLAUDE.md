@@ -2,13 +2,13 @@
 
 ## Project Description
 
-Trovare is a Telegram chatbot that helps 2 users find apartments. It combines three capabilities:
+Trovare is a Discord chatbot that helps 2 users find apartments. It combines three capabilities:
 
-1. **On-demand analysis** — the user sends a listing URL in Telegram, the bot scrapes the page, analyzes the listing with Claude (match against criteria, price quality, scam risks) and returns a structured summary.
+1. **On-demand analysis** — the user sends a listing URL in Discord, the bot scrapes the page, analyzes the listing with Claude (match against criteria, price quality, scam risks) and returns a structured summary.
 2. **Interactive chat** — the user can freely converse with the bot to compare listings, ask questions, update search criteria, or manage their saved listings.
-3. **Automated watch** — twice a day (noon and evening), the bot scrapes a configured list of sites, filters new listings against the criteria, and sends a digest to Telegram.
+3. **Automated watch** — twice a day (noon and evening), the bot scrapes a configured list of sites, filters new listings against the criteria, and sends a digest to Discord.
 
-The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interface, no dashboard — Telegram is the only user interface.
+The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interface, no dashboard — Discord is the only user interface.
 
 ---
 
@@ -16,8 +16,8 @@ The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interfac
 
 | Layer | Technology | Role |
 |---|---|---|
-| API & server | FastAPI + Uvicorn | Telegram webhook entry point, internal REST routes |
-| Telegram bot | python-telegram-bot | Receive/send messages via webhook |
+| API & server | FastAPI + Uvicorn | App host, internal REST routes |
+| Discord bot | discord.py | Receive/send messages via the gateway (integrated in the app lifespan) |
 | LLM analysis | anthropic SDK — Sonnet 4.6 | Deep listing analysis, conversational chat |
 | LLM filtering | anthropic SDK — Haiku 4.5 | Intent classification, watch filtering (lower cost) |
 | Scheduling | APScheduler | Automated jobs integrated into FastAPI |
@@ -35,10 +35,9 @@ The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interfac
 ```
 trovare/
 ├── api/
-│   ├── main.py              # FastAPI app, Telegram webhook registration
+│   ├── main.py              # FastAPI app, Discord bot lifecycle (gateway client)
 │   ├── scheduler.py         # APScheduler — noon/evening jobs
 │   └── routes/
-│       ├── telegram.py      # POST /telegram — main webhook
 │       ├── analyze.py       # POST /analyze — analyze a listing URL
 │       ├── chat.py          # POST /chat — conversation
 │       ├── criteria.py      # GET|PATCH /criteria — read/write criteria
@@ -62,12 +61,13 @@ trovare/
 │   ├── db.py                # SQLite init, aiosqlite connection pool
 │   ├── models.py            # Dataclasses: Listing, Analysis, Conversation
 │   ├── listings.py          # Listings CRUD
-│   └── conversations.py     # Conversation history per chat_id
+│   └── conversations.py     # Conversation history per channel
 │
 ├── bot/
+│   ├── discord_bot.py       # discord.py gateway client + on_message handler
 │   ├── dispatcher.py        # Message routing → intent → handler
 │   ├── handlers.py          # Handlers for each intent/command
-│   └── formatter.py         # Telegram response formatting (Markdown)
+│   └── formatter.py         # Discord response formatting (Markdown)
 │
 ├── criteria.yaml            # Search criteria (see dedicated section)
 ├── .env                     # Environment variables (do not commit)
@@ -81,8 +81,8 @@ trovare/
 ## Main Message Flow
 
 ```
-Telegram
-  └─→ POST /telegram (webhook)
+Discord (gateway)
+  └─→ bot/discord_bot.py on_message (allow-listed channels)
         └─→ bot/dispatcher.py
               ├─→ /cmd command → direct handler (no LLM)
               └─→ free text
@@ -92,12 +92,15 @@ Telegram
                           ├─→ LISTING_*     → storage/listings.py
                           ├─→ COMPARE/DETAIL → storage/ + llm/analyzer.py
                           └─→ GENERAL_CHAT  → llm/analyzer.py + history
-                                └─→ bot/formatter.py → Telegram response
+                                └─→ bot/formatter.py → Discord channel reply
 ```
 
 ---
 
-## Telegram Commands
+## Discord Commands
+
+The bot responds to every message posted in the allow-listed channels
+(`DISCORD_ALLOWED_CHANNEL_IDS`).
 
 ### Explicit commands (no LLM)
 
@@ -166,10 +169,9 @@ This file is read on every request (no cache) so bot modifications take effect i
 ## Environment Variables (.env)
 
 ```bash
-# Telegram
-TELEGRAM_BOT_TOKEN=         # Token from @BotFather
-TELEGRAM_WEBHOOK_URL=       # Public VPS URL, e.g. https://myvps.com/telegram
-TELEGRAM_ALLOWED_CHAT_IDS=  # Authorized Telegram chat IDs, comma-separated
+# Discord
+DISCORD_BOT_TOKEN=            # Bot token from the Discord developer portal
+DISCORD_ALLOWED_CHANNEL_IDS= # Authorized Discord channel IDs, comma-separated
 
 # Anthropic
 ANTHROPIC_API_KEY=          # Anthropic API key (console.anthropic.com)
