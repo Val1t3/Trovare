@@ -14,17 +14,18 @@ The project runs on a Linux VPS (Ubuntu 24) or on MacOS locally. No web interfac
 
 ## Tech Stack
 
-| Layer | Technology | Role |
-|---|---|---|
-| API & server | FastAPI + Uvicorn | App host, internal REST routes |
-| Discord bot | discord.py | Receive/send messages via the gateway (integrated in the app lifespan) |
-| LLM analysis | anthropic SDK — Sonnet 4.6 | Deep listing analysis, conversational chat |
-| LLM filtering | anthropic SDK — Haiku 4.5 | Intent classification, watch filtering (lower cost) |
-| Scheduling | APScheduler | Automated jobs integrated into FastAPI |
-| Database | SQLite + aiosqlite | Store listings, conversation history, metadata |
-| Criteria config | criteria.json | Search criteria editable without redeployment |
-| Environment | python-dotenv | Sensitive variables (.env) |
-| Package manager | uv | Fast Python package & project manager |
+| Layer                | Technology                    | Role                                                                   |
+| -------------------- | ----------------------------- | ---------------------------------------------------------------------- |
+| API & server         | FastAPI + Uvicorn             | App host, internal REST routes                                         |
+| Discord bot          | discord.py                    | Receive/send messages via the gateway (integrated in the app lifespan) |
+| LLM chat             | anthropic SDK — Haiku 4.5     | Interactive chat, intent classification, watch filtering (lower cost)  |
+| LLM analysis         | anthropic SDK — Sonnet 4.6    | Deep listing analysis (future work)                                    |
+| Scheduling           | APScheduler                   | Automated jobs integrated into FastAPI                                 |
+| Conversation context | JSON file (data/context.json) | Shared chat history across both users, capped at 20 messages           |
+| Database             | SQLite + aiosqlite            | Store listings, metadata (future work)                                 |
+| Criteria config      | criteria.json                 | Search criteria editable without redeployment                          |
+| Environment          | python-dotenv                 | Sensitive variables (.env)                                             |
+| Package manager      | uv                            | Fast Python package & project manager                                  |
 
 **Python version**: 3.14
 
@@ -52,24 +53,29 @@ trovare/
 │   └── seloger.py           # SeLoger scraper (playwright)
 │
 ├── llm/
-│   ├── classifier.py        # Intent classification (Haiku) → JSON
-│   ├── analyzer.py          # Full listing analysis (Sonnet)
-│   ├── filter.py            # Fast watch filtering (Haiku)
+│   ├── classifier.py        # Intent classification (Haiku) → JSON (future work)
+│   ├── analyzer.py          # Full listing analysis (Sonnet, future work)
+│   ├── filter.py            # Fast watch filtering (Haiku, future work)
+│   ├── client.py            # Anthropic Haiku wiring for interactive chat
 │   └── prompts.py           # Centralized prompt templates
 │
 ├── storage/
-│   ├── db.py                # SQLite init, aiosqlite connection pool
-│   ├── models.py            # Dataclasses: Listing, Analysis, Conversation
-│   ├── listings.py          # Listings CRUD
-│   └── conversations.py     # Conversation history per channel
+│   ├── db.py                # SQLite init, aiosqlite connection pool (future work)
+│   ├── listings.py          # Listings CRUD (future work)
+│   ├── models.py            # Dataclasses: ContextMessage (Listing/Analysis future work)
+│   └── context.py           # Shared JSON-backed chat history (data/context.json)
+│
+├── commands/
+│   ├── params.py            # CommandParameter — single nullable-field argument for all command handlers
+│   └── new.py               # /new — reset the shared conversation context
 │
 ├── bot/
 │   ├── discord_bot.py       # discord.py gateway client + on_message handler
-│   ├── dispatcher.py        # Message routing → intent → handler
-│   ├── handlers.py          # Handlers for each intent/command
-│   └── formatter.py         # Discord response formatting (Markdown)
+│   ├── dispatcher.py        # Message routing → command/chat handler
+│   ├── handlers.py          # handle_command() routing table + handle_chat() (LLM chat)
+│   └── formatter.py         # Discord response formatting (Markdown, future work)
 │
-├── criteria.yaml            # Search criteria (see dedicated section)
+├── criteria.yaml            # Search criteria (see dedicated section, future work)
 ├── .env                     # Environment variables (do not commit)
 ├── .env.example             # .env template without sensitive values
 ├── requirements.txt
@@ -84,16 +90,17 @@ trovare/
 Discord (gateway)
   └─→ bot/discord_bot.py on_message (allow-listed channels)
         └─→ bot/dispatcher.py
-              ├─→ /cmd command → direct handler (no LLM)
-              └─→ free text
-                    └─→ llm/classifier.py (Haiku) → intent + JSON params
-                          ├─→ ANALYZE_URL   → scrapers/ + llm/analyzer.py
-                          ├─→ CRITERIA_*    → storage/ + confirmation → criteria.yaml
-                          ├─→ LISTING_*     → storage/listings.py
-                          ├─→ COMPARE/DETAIL → storage/ + llm/analyzer.py
-                          └─→ GENERAL_CHAT  → llm/analyzer.py + history
-                                └─→ bot/formatter.py → Discord channel reply
+              ├─→ /cmd command → bot/handlers.py:handle_command()
+              │     └─→ commands/<name>.py handler(CommandParameter) — e.g. /new
+              └─→ free text → bot/handlers.py:handle_chat()
+                    └─→ llm/client.py (Haiku) + storage/context.py (shared history, capped at 20)
+                          └─→ Discord channel reply
 ```
+
+Intent classification (`llm/classifier.py`) and the routed intents in the table
+below are not implemented yet — all free text currently goes straight to
+general chat. The full intent-routed flow (`ANALYZE_URL`, `CRITERIA_*`,
+`LISTING_*`, etc.) is future work.
 
 ---
 
@@ -104,33 +111,28 @@ The bot responds to every message posted in the allow-listed channels
 
 ### Explicit commands (no LLM)
 
-| Command | Description |
-|---|---|
-| `/start` | Welcome message, list of available commands |
-| `/criteria` | Display current criteria in readable format |
-| `/listings [n]` | Show the n most recent listings (default: 10) |
-| `/watch` | Trigger an immediate manual watch |
-| `/stats` | Today's metrics (listings seen, estimated API cost) |
-| `/reset` | Reset the current conversation history |
-| `/help` | Full list of commands and recognized intents |
+| Command | Description                                                                                        |
+| ------- | -------------------------------------------------------------------------------------------------- |
+| `/new`  | Reset the shared conversation history (also auto-resets at 20 messages, with a warning beforehand) |
+| `/help` | Full list of commands and recognized intents                                                       |
 
 ### Natural language intents (Claude classifies)
 
-| Intent | Examples |
-|---|---|
-| `ANALYZE_URL` | Sending a listing URL |
-| `COMPARE` | "Compare the last 3 listings" |
-| `DETAIL` | "Are there any red flags on this one?" |
-| `CRITERIA_ADD` | "Add Vincennes to my cities" |
-| `CRITERIA_REMOVE` | "Remove the balcony requirement" |
-| `CRITERIA_UPDATE` | "Raise the max rent to €1,600" |
-| `CRITERIA_READ` | "What are my current criteria?" |
-| `LISTING_TAG` | "Mark the last one as interesting" |
-| `LISTING_DELETE` | "Delete the Montreuil listing" |
-| `LISTING_FILTER` | "Show apartments with a balcony under €1,200" |
-| `SCHEDULE_UPDATE` | "Move the evening watch to 8pm" |
-| `SITE_ADD` | "Add logic-immo.com to the watch list" |
-| `GENERAL_CHAT` | Anything else |
+| Intent            | Examples                                      |
+| ----------------- | --------------------------------------------- |
+| `ANALYZE_URL`     | Sending a listing URL                         |
+| `COMPARE`         | "Compare the last 3 listings"                 |
+| `DETAIL`          | "Are there any red flags on this one?"        |
+| `CRITERIA_ADD`    | "Add Vincennes to my cities"                  |
+| `CRITERIA_REMOVE` | "Remove the balcony requirement"              |
+| `CRITERIA_UPDATE` | "Raise the max rent to €1,600"                |
+| `CRITERIA_READ`   | "What are my current criteria?"               |
+| `LISTING_TAG`     | "Mark the last one as interesting"            |
+| `LISTING_DELETE`  | "Delete the Montreuil listing"                |
+| `LISTING_FILTER`  | "Show apartments with a balcony under €1,200" |
+| `SCHEDULE_UPDATE` | "Move the evening watch to 8pm"               |
+| `SITE_ADD`        | "Add logic-immo.com to the watch list"        |
+| `GENERAL_CHAT`    | Anything else                                 |
 
 **Confirmation rule**: any write operation (PATCH/DELETE) triggers a reformulation by the bot before execution. Listing tags (non-destructive) are the only exception.
 
@@ -139,8 +141,8 @@ The bot responds to every message posted in the allow-listed channels
 ## criteria.yaml
 
 ```yaml
-max_rent: 1400            # €/month all charges included
-min_surface: 35           # m²
+max_rent: 1400 # €/month all charges included
+min_surface: 35 # m²
 min_rooms: 2
 cities:
   - Paris 11th

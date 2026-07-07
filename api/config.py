@@ -27,6 +27,16 @@ def allowed_channel_ids() -> set[int]:
     return ids
 
 
+def anthropic_api_key() -> str | None:
+    """Anthropic API key (console.anthropic.com)."""
+    return os.getenv("ANTHROPIC_API_KEY")
+
+
+def anthropic_chat_model() -> str:
+    """Model ID used for general chat (Haiku — fast/cheap)."""
+    return os.getenv("ANTHROPIC_CHAT_MODEL", "claude-haiku-4-5-20251001")
+
+
 def log_level() -> str:
     """Logging level name (defaults to INFO)."""
     return os.getenv("LOG_LEVEL", "INFO").upper()

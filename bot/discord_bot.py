@@ -55,7 +55,7 @@ def create_client() -> discord.Client:
             message.content,
         )
 
-        reply = await dispatch(message.content)
+        reply = await dispatch(message.content, author=message.author.display_name)
 
         # Log the reply sent back to the channel.
         logger.info("Reply to channel_id=%s: %r", message.channel.id, reply)

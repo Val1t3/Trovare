@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     token = discord_bot_token()
     client = None
     task = None
+
     if token:
         client = create_client()
         # Run the gateway connection in the background; awaiting it would block
